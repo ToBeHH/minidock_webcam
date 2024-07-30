@@ -9,6 +9,6 @@ switch between different webcams, allowing them to
 watch different places of the earth in real time with ease.
 
 
-*Important!*
-Right now, the app completely blocks the MiniDock, ignoring all user input. 
-If you can support me here, I am more than happy for any help!
+# Help needed:
+
+A issue I am struggeling with is how to resize the received JPG images. Again, help is highly appreciated.

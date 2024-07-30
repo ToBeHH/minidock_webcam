@@ -1,7 +1,8 @@
 import lvgl as lv
 import urequests
 import net
-import uasyncio as asyncio
+import _thread
+import time
 
 # App Name
 NAME = "Webcam"
@@ -15,26 +16,21 @@ label = None
 
 # App manager
 app_mgr = None
-
+task_running = False
 
 # Constants
 DEFAULT_BG_COLOR = lv.color_hex3(0x000)
-retrieving_image = asyncio.Lock()
-task = None
 
 # Current image index
 webcam_index = 0
 
-async def load_webcam(lock):
-    global scr, label, webcam_index
-    
-    await lock.acquire()
-    # automatically aquires lock and releases it
+def load_webcam():
+    global scr, label, webcam_index, task_running
     
     error = False
     
     try:
-        while (not error):
+        while (task_running and not error):
             if scr:
                 s = app_mgr.config()
                 url = s.get(f"url{webcam_index + 1}", "Unknown")
@@ -68,7 +64,7 @@ async def load_webcam(lock):
                             image.set_src(image_description)
                             image.center()
                             
-                            scr.set_style_bg_color(lv.color_hex(0x000000),0)
+                            scr.set_style_bg_color(DEFAULT_BG_COLOR,0)
                         else:
                             if response is None:
                                 label.set_text(f"Error URL wrongly formatted")
@@ -82,11 +78,11 @@ async def load_webcam(lock):
                     label.set_text(f"Please configure webcams in application settings")
                     lv.scr_load(scr)
                     error = True
-            await asyncio.sleep_ms(100)  # Ensure producer has time to grab the lock4
-    except asyncio.CancelledError:
-        print('Webcam thread received cancel command')
+            time.sleep_ms(100)  # Allow other tasks to run
+    except:
+        print('Webcam thread had an exception')
         raise
-    lock.release()
+    print("Webcam thread ended")
 
 def change_webcam(delta):
     global webcam_index, app_mgr, scr
@@ -110,6 +106,8 @@ def change_webcam(delta):
 def event_handler(event):
     global app_mgr
     e_code = event.get_code()
+    printf(f"Got event with code {e_code}")
+    
     if e_code == lv.EVENT.KEY:
         e_key = event.get_key()
         print(f"Got key {e_key}")
@@ -128,23 +126,21 @@ async def on_boot(apm):
     global app_mgr
     app_mgr = apm
     
-async def on_pause():
-    print('on pause')
-    global task
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        print("Webcam loading task is cancelled now")
-    
 async def on_resume():
     print('on resume')
-    global task
-    task = asyncio.create_task(load_webcam(retrieving_image))
+    global task_running
+    task_running = True
+    _thread.start_new_thread(load_webcam, ())
+    
+async def on_pause():
+    print('on pause')
+    global task_running
+    task_running = False    
     
 async def on_stop():
     print('on stop')
-    global scr
+    global scr, task_running
+    task_running = False
     if scr:
         scr.clean()
         scr.del_async()
@@ -169,11 +165,6 @@ async def on_start():
     lv.group_focus_obj(scr)
     lv.group_get_default().set_editing(True)
 
-#async def on_running_foreground():
-#    """Called when the app is active, approximately every 200ms."""
-#    global retrieving_image
-#    if not retrieving_image.locked():
-#        asyncio.create_task(load_webcam(retrieving_image))
         
 def get_settings_json():
     return {
