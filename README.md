@@ -8,7 +8,5 @@ user's configured webcams. With an encoder knob, users can effortlessly
 switch between different webcams, allowing them to 
 watch different places of the earth in real time with ease.
 
-
-# Help needed:
-
-A issue I am struggeling with is how to resize the received JPG images. Again, help is highly appreciated.
+Please note, that images cannot be scaled due to limited processing power. The URLs you provide must 
+present a JPEG image (not MJPEG or any other format) in 320x240 pixels resolution.
