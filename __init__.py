@@ -71,8 +71,6 @@ def load_image_from_url(url):
 def load_webcam():
     global scr, webcam_index, task_running, task_running_lock
     
-    error = False
-    
     scr = lv.obj()
     lv.scr_load(scr)
 
@@ -93,21 +91,22 @@ def load_webcam():
     with task_running_lock:
         time.sleep_ms(800)  # Allow other tasks to run
         try:
-            while (task_running and not error):
+            while (task_running):
                 s = app_mgr.config()
                 url = s.get(f"url{webcam_index + 1}", "Unknown")
                 
                 try:
                     image_description = load_image_from_url(url)
-                    label.set_text("")
                     
                     if scr: # can get None, if app was exited
+                        label.set_text("")
                         scr.set_style_bg_img_src(image_description, lv.PART.MAIN)
                 except Exception as error:
-                    print(error)
+                    print(f"Error: {error}")
                     if scr: # can get None, if app was exited
                         label.set_text(error)
                         lv.scr_load(scr)
+                        scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
                  
                 if task_running:
                     time.sleep_ms(100)  # Allow other tasks to run
