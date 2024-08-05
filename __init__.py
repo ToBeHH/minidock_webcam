@@ -12,6 +12,7 @@ ICON = "A:apps/webcam/resources/icon.png"
 
 # LVGL widgets
 scr = None
+label = None
 
 # App manager
 app_mgr = None
@@ -69,16 +70,19 @@ def load_image_from_url(url):
     
 
 def load_webcam():
-    global scr, webcam_index, task_running, task_running_lock
+    global scr, label, webcam_index, task_running, task_running_lock
     
-    scr = lv.obj()
-    lv.scr_load(scr)
+    if scr is None:
+        scr = lv.obj()
+        lv.scr_load(scr)
 
-    scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)    
-    label = lv.label(scr)
-    label.center()
+    scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
+    scr.set_style_bg_img_src("A:apps/webcam/resources/bg.png", lv.PART.MAIN)
+
+    if label is None:
+        label = lv.label(scr)
+        label.center()
     label.set_text(f"Loading webcam {webcam_index + 1}...")
-    lv.scr_load(scr)
 
     # Focus the key operation on the current screen and enable editing mode.
     lv.group_get_default().add_obj(scr)
@@ -104,9 +108,9 @@ def load_webcam():
                 except Exception as error:
                     print(f"Error: {error}")
                     if scr: # can get None, if app was exited
-                        label.set_text(error)
-                        lv.scr_load(scr)
+                        label.set_text(str(error))
                         scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
+                        time.sleep_ms(500)
                  
                 if task_running:
                     time.sleep_ms(100)  # Allow other tasks to run
@@ -117,7 +121,7 @@ def load_webcam():
     
 
 def change_webcam(delta):
-    global webcam_index, app_mgr, scr
+    global webcam_index, app_mgr, scr, label
     
     s = app_mgr.config()
     
@@ -127,18 +131,15 @@ def change_webcam(delta):
         # Check if URL is valid:
         url = s.get(f"url{webcam_index + 1}", "Unknown")
         if url.startswith("http") or webcam_index == 0:
-            scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)    
-            label = lv.label(scr)
-            label.center()
+            scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
+            scr.set_style_bg_img_src("A:apps/webcam/resources/bg.png", lv.PART.MAIN)
             label.set_text(f"Loading webcam {webcam_index + 1}...")
-            lv.scr_load(scr)
             break
         
 
 def event_handler(event):
     global app_mgr
     e_code = event.get_code()
-    printf(f"Got event with code {e_code}")
     
     if e_code == lv.EVENT.KEY:
         e_key = event.get_key()
@@ -147,8 +148,7 @@ def event_handler(event):
             change_webcam(1)
         elif e_key == lv.KEY.LEFT:
             change_webcam(-1)
-        elif e_key == lv.KEY.ESC:
-            await app_mgr.exit()
+        #Escape key == EXIT app is handled by the underlying OS
     elif e_code == lv.EVENT.FOCUSED:
         # If not in edit mode, set to edit mode.
         if not lv.group_get_default().get_editing():
@@ -188,6 +188,7 @@ async def on_stop():
         scr.clean()
         scr.del_async()
         scr = None
+        label = None
         
 
 async def on_start():
