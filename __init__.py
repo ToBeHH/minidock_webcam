@@ -24,6 +24,7 @@ DEFAULT_BG_COLOR = lv.color_hex3(0x000)
 
 # Current image index
 webcam_index = 0
+webcam_changed = False
 
 def load_image_from_url(url):
     global task_running
@@ -70,7 +71,7 @@ def load_image_from_url(url):
     
 
 def load_webcam():
-    global scr, label, webcam_index, task_running, task_running_lock
+    global scr, label, webcam_index, task_running, task_running_lock, webcam_changed
     
     if scr is None:
         scr = lv.obj()
@@ -102,9 +103,10 @@ def load_webcam():
                 try:
                     image_description = load_image_from_url(url)
                     
-                    if scr: # can get None, if app was exited
+                    if scr and not webcam_changed: # can get None, if app was exited
                         label.set_text("")
                         scr.set_style_bg_img_src(image_description, lv.PART.MAIN)
+                    webcam_changed = False
                 except Exception as error:
                     print(f"Error: {error}")
                     if scr: # can get None, if app was exited
@@ -121,9 +123,10 @@ def load_webcam():
     
 
 def change_webcam(delta):
-    global webcam_index, app_mgr, scr, label
+    global webcam_index, app_mgr, scr, label, webcam_changed
     
     s = app_mgr.config()
+    webcam_changed = True
     
     while (True):
         webcam_index = (webcam_index + delta) % 5
@@ -193,6 +196,8 @@ async def on_stop():
 
 async def on_start():
     print('on start')
+    scr = None
+    label = None
     
     
 def get_settings_json():
