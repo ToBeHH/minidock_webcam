@@ -16,18 +16,43 @@ label = None
 
 # App manager
 app_mgr = None
-task_running = False
+task_running: bool = False
 task_running_lock = _thread.allocate_lock()
 
 # Constants
 DEFAULT_BG_COLOR = lv.color_hex3(0x000)
 
 # Current image index
-webcam_index = 0
-webcam_changed = False
+webcam_index: int = 0
+webcam_changed: bool = False
+
+DEBUG: bool = False
 
 
-def load_image_from_url(url):
+def dprint(msg: str):
+    """
+    Print a debug message to console, if in debug mode.
+
+    Args:
+        msg (str): The message to print
+    """
+    if DEBUG:
+        print(msg)
+
+
+def load_image_from_url(url: str):
+    """
+    Actually load an image from a given URL.
+
+    Args:
+        url (str): The URL to load the image from
+
+    Returns:
+        LVGL Image description with the respective image.
+
+    Raises:
+        Exception, if something went wrong loading the image.
+    """
     global task_running
 
     if url.startswith("http"):
@@ -43,17 +68,17 @@ def load_image_from_url(url):
                     sep_index = usernamepassword.index(":")
                     username = usernamepassword[:sep_index]
                     password = usernamepassword[(sep_index + 1) :]
-                    print(
+                    dprint(
                         f"Calling {url} with Username '{username}' and given password"
                     )
                     response = urequests.get(url, auth=(username, password))
             else:
-                print(f"Calling {url} without basic auth")
+                dprint(f"Calling {url} without basic auth")
                 response = urequests.get(url)
 
             status_code = 0
             if response is not None:
-                print(f"Got image with response {response.status_code}")
+                dprint(f"Got image with response {response.status_code}")
                 status_code = response.status_code
 
             if task_running:
@@ -81,6 +106,11 @@ def load_image_from_url(url):
 
 
 def load_webcam():
+    """
+    Task to manage loading the webcam images and displaying them.
+
+    There is especially some error handling in this method.
+    """
     global scr, label, webcam_index, task_running, task_running_lock, webcam_changed
 
     if scr is None:
@@ -118,7 +148,7 @@ def load_webcam():
                         scr.set_style_bg_img_src(image_description, lv.PART.MAIN)
                     webcam_changed = False
                 except Exception as error:
-                    print(f"Error: {error}")
+                    dprint(f"Error: {error}")
                     if scr:  # can get None, if app was exited
                         label.set_text(str(error))
                         scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
@@ -129,10 +159,19 @@ def load_webcam():
         except Exception as err:
             print(f"Webcam thread had an exception: {err}")
             raise
-    print("Webcam thread ended")
+    dprint("Webcam thread ended")
 
 
-def change_webcam(delta):
+def change_webcam(delta: int):
+    """
+    Change the webcam.
+
+    Also checks, if the settings have an entry for the new webcam. If not, the next camera is chosen.
+
+    Args:
+        delta (int): Get the next (+1) or previous (-1) camera
+    """
+
     global webcam_index, app_mgr, scr, label, webcam_changed
 
     s = app_mgr.config()
@@ -150,12 +189,21 @@ def change_webcam(delta):
 
 
 def event_handler(event):
+    """
+    Code executed when an event is called.
+
+    Note:
+    - This can be some paint events as well. Therefore, check the event code!
+    - Don't call a method using "await"! Otherwise, the whole function becomes async!
+
+    See https://docs.lvgl.io/master/overview/event.html for possible events.
+    """
     global app_mgr
     e_code = event.get_code()
 
     if e_code == lv.EVENT.KEY:
         e_key = event.get_key()
-        print(f"Got key {e_key}")
+        dprint(f"Got key {e_key}")
         if e_key == lv.KEY.RIGHT:
             change_webcam(1)
         elif e_key == lv.KEY.LEFT:
@@ -168,39 +216,58 @@ def event_handler(event):
 
 
 async def on_boot(apm):
+    """
+    Code executed on boot.
+    See https://dock.myvobot.com/developer/guides/app-design/ for clife cycle diagram
+    """
     global app_mgr
     app_mgr = apm
 
 
 async def on_resume():
-    print("on resume")
+    """
+    Code executed on resume. Essentially this starts the webcam thread.
+
+    See https://dock.myvobot.com/developer/guides/app-design/ for clife cycle diagram
+    """
+    dprint("on resume")
     global task_running, task_running_lock
 
     if task_running_lock.locked():
-        print("Waiting for lock to be released / previous thread to fininsh")
+        dprint("Waiting for lock to be released / previous thread to fininsh")
         while task_running_lock.locked():
             time.sleep_ms(100)
 
-    print("Starting new thread")
+    dprint("Starting new thread")
     task_running = True
     _thread.start_new_thread(load_webcam, ())
 
 
 async def on_pause():
-    print("on pause")
+    """
+    Code executed on pause. This stops the webcam thread.
+
+    See https://dock.myvobot.com/developer/guides/app-design/ for clife cycle diagram
+    """
+    dprint("on pause")
     global task_running
     task_running = False
 
 
 async def on_stop():
-    print("on stop")
+    """
+    Code executed on stop. Make sure, everything is cleaned up nicely.
+
+    See https://dock.myvobot.com/developer/guides/app-design/ for clife cycle diagram
+    """
+    dprint("on stop")
     global scr, label, task_running, task_running_lock
     task_running = False
     scr.set_style_bg_img_src("A:apps/webcam/resources/bg.png", lv.PART.MAIN)
     label.set_text("Ending...")
 
     if task_running_lock.locked():
-        print("Waiting for lock to be released / previous thread to fininsh")
+        dprint("Waiting for lock to be released / previous thread to fininsh")
         while task_running_lock.locked():
             time.sleep_ms(100)
 
@@ -212,12 +279,23 @@ async def on_stop():
 
 
 async def on_start():
-    print("on start")
+    """
+    Code executed on start.
+
+    See https://dock.myvobot.com/developer/guides/app-design/ for clife cycle diagram
+    """
+    dprint("on start")
     scr = None
     label = None
 
 
 def get_settings_json():
+    """
+    App settings.
+
+    The app is configured via the webbrowser. This json helps creating the app settings page.
+    See https://dock.myvobot.com/developer/reference/web-page/ for reference
+    """
     return {
         "title": "Settings for Webcam app",
         "form": [
