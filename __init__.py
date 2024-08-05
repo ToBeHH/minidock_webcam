@@ -1,4 +1,3 @@
-from typing import Any
 import lvgl as lv
 import urequests
 import net
