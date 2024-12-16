@@ -3,6 +3,7 @@ import urequests
 import net
 import _thread
 import time
+import os
 
 # App Name
 NAME: str = "Webcam"
@@ -13,6 +14,7 @@ ICON: str = "A:apps/webcam/resources/icon.png"
 # LVGL widgets
 scr: lv.obj = None
 label: lv.obj = None
+img: lv.obj = None
 
 # App manager
 app_mgr: Any = None
@@ -27,7 +29,10 @@ webcam_index: int = 0
 webcam_name: str = ""
 webcam_changed: bool = False
 
-DEBUG: bool = False
+DEBUG: bool = True
+
+TEMPFILE_SAVE = "data/webcam.jpg"
+TEMPFILE_LOAD = "A:data/webcam.jpg"
 
 
 def dprint(msg: str) -> None:
@@ -84,18 +89,26 @@ def load_image_from_url(url: str) -> None:
 
             if task_running:
                 if response is not None and response.status_code == 200:
-                    image_description = lv.img_dsc_t(
-                        {"data_size": len(response.content), "data": response.content}
-                    )
+                    try:
+                        os.remove(TEMPFILE_SAVE)
+                    except Exception as error:
+                        print("File not found or cannot be deleted")
+                        print(error)
+                    print(os.listdir("data"))
+                    with open(TEMPFILE_SAVE, 'wb') as f:
+                        f.write(response.content)
 
                     response.close()
+                    dprint(f"Using file {TEMPFILE_SAVE}")
 
-                    return image_description
+                    return TEMPFILE_SAVE
                 else:
                     if response is None:
+                        print(f"Error while loading data from {url} - most likely URL is wrongly formatted")
                         raise Exception(f"Error URL wrongly formatted")
                     else:
                         response.close()
+                        print(f"Error {status_code} while loading {url}")
                         raise Exception(f"Error {status_code} while loading {url}")
             else:
                 if response is not None:
@@ -144,14 +157,22 @@ def load_webcam() -> None:
                 url = app_mgr_config.get(f"url{webcam_index + 1}", "Unknown")
 
                 try:
-                    image_description = load_image_from_url(url)
+                    image_filename = load_image_from_url(url)
 
                     if scr and not webcam_changed:  # can get None, if app was exited
-                        label.set_text("")
-                        scr.set_style_bg_img_src(image_description, lv.PART.MAIN)
+                        try:
+                            label.set_text("")                      
+                            dprint(f"Showing image {TEMPFILE_LOAD}")
+                            scr.set_style_bg_img_src(TEMPFILE_LOAD, lv.PART.MAIN)
+                        except:
+                            label.set_text("File is empty")
+                            scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
+                    
                     webcam_changed = False
                 except Exception as error:
-                    dprint(f"Error: {error}")
+                    dprint(f"Error while loading image form {TEMPFILE_LOAD}: {error}")
+                    import sys
+                    sys.print_exception(error)
                     if scr:  # can get None, if app was exited
                         label.set_text(str(error))
                         scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
@@ -179,6 +200,11 @@ def change_webcam(delta: int) -> None:
 
     app_mgr_config = app_mgr.config()
     webcam_changed = True
+    
+    try:
+        os.remove(TEMPFILE_SAVE)
+    except:
+        print("File not found or cannot be deleted")
 
     while True:
         webcam_index = (webcam_index + delta) % 5
@@ -268,7 +294,7 @@ async def on_stop() -> None:
     global scr, label, task_running, task_running_lock
     task_running = False
     scr.set_style_bg_img_src("A:apps/webcam/resources/bg.png", lv.PART.MAIN)
-    label.set_text("Ending...")
+    label.set_text("Stopping...")
 
     if task_running_lock.locked():
         dprint("Waiting for lock to be released / previous thread to fininsh")
