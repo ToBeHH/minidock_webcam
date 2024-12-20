@@ -31,9 +31,8 @@ webcam_changed: bool = False
 
 DEBUG: bool = True
 
-TEMPFILE_SAVE = "data/webcam.jpg"
-TEMPFILE_LOAD = "A:data/webcam.jpg"
-
+last_filename: str = ""
+DIRECTORY= "data"
 
 def dprint(msg: str) -> None:
     """
@@ -59,7 +58,7 @@ def load_image_from_url(url: str) -> None:
     Raises:
         Exception, if something went wrong loading the image.
     """
-    global task_running
+    global task_running, last_filename
 
     if url.startswith("http"):
         if net.connected():
@@ -89,19 +88,19 @@ def load_image_from_url(url: str) -> None:
 
             if task_running:
                 if response is not None and response.status_code == 200:
-                    try:
-                        os.remove(TEMPFILE_SAVE)
-                    except Exception as error:
-                        print("File not found or cannot be deleted")
-                        print(error)
-                    print(os.listdir("data"))
-                    with open(TEMPFILE_SAVE, 'wb') as f:
+                    if last_filename != "":
+                        try:
+                            os.remove(last_filename)
+                        except Exception as error:
+                            pass
+                        
+                    last_filename = f"{DIRECTORY}/webcam-{time.ticks_ms()}.jpg"
+                    with open(last_filename, 'wb') as f:
                         f.write(response.content)
 
                     response.close()
-                    dprint(f"Using file {TEMPFILE_SAVE}")
 
-                    return TEMPFILE_SAVE
+                    return last_filename
                 else:
                     if response is None:
                         print(f"Error while loading data from {url} - most likely URL is wrongly formatted")
@@ -151,7 +150,7 @@ def load_webcam() -> None:
     scr.add_event(event_handler, lv.EVENT.ALL, None)
 
     with task_running_lock:
-        time.sleep_ms(800)  # Allow other tasks to run
+        time.sleep_ms(1200)  # Allow other tasks to run
         try:
             while task_running:
                 url = app_mgr_config.get(f"url{webcam_index + 1}", "Unknown")
@@ -162,15 +161,15 @@ def load_webcam() -> None:
                     if scr and not webcam_changed:  # can get None, if app was exited
                         try:
                             label.set_text("")                      
-                            dprint(f"Showing image {TEMPFILE_LOAD}")
-                            scr.set_style_bg_img_src(TEMPFILE_LOAD, lv.PART.MAIN)
+                            dprint(f"Showing image {last_filename}")
+                            scr.set_style_bg_img_src(f"A:{image_filename}", lv.PART.MAIN)
                         except:
                             label.set_text("File is empty")
                             scr.set_style_bg_color(DEFAULT_BG_COLOR, lv.PART.MAIN)
                     
                     webcam_changed = False
                 except Exception as error:
-                    dprint(f"Error while loading image form {TEMPFILE_LOAD}: {error}")
+                    dprint(f"Error while loading image form {last_filename}: {error}")
                     import sys
                     sys.print_exception(error)
                     if scr:  # can get None, if app was exited
@@ -179,7 +178,7 @@ def load_webcam() -> None:
                         time.sleep_ms(500)
 
                 if task_running:
-                    time.sleep_ms(100)  # Allow other tasks to run
+                    time.sleep_ms(200)  # Allow other tasks to run
         except Exception as err:
             print(f"Webcam thread had an exception: {err}")
             raise
@@ -196,15 +195,17 @@ def change_webcam(delta: int) -> None:
         delta (int): Get the next (+1) or previous (-1) camera
     """
 
-    global webcam_index, app_mgr, scr, label, webcam_changed
+    global webcam_index, app_mgr, scr, label, webcam_changed, last_filename
 
     app_mgr_config = app_mgr.config()
     webcam_changed = True
     
-    try:
-        os.remove(TEMPFILE_SAVE)
-    except:
-        print("File not found or cannot be deleted")
+    if last_filename != "":
+        try:
+            os.remove(last_filename)
+        except:
+            pass
+        last_filename = ""
 
     while True:
         webcam_index = (webcam_index + delta) % 5
@@ -234,9 +235,9 @@ def event_handler(event) -> None:
     if e_code == lv.EVENT.KEY:
         e_key = event.get_key()
         dprint(f"Got key {e_key}")
-        if e_key == lv.KEY.RIGHT:
+        if e_key == lv.KEY.LEFT:
             change_webcam(1)
-        elif e_key == lv.KEY.LEFT:
+        elif e_key == lv.KEY.RIGHT:
             change_webcam(-1)
         # Escape key == EXIT app is handled by the underlying OS
     elif e_code == lv.EVENT.FOCUSED:
@@ -266,7 +267,7 @@ async def on_resume() -> None:
     if task_running_lock.locked():
         dprint("Waiting for lock to be released / previous thread to fininsh")
         while task_running_lock.locked():
-            time.sleep_ms(100)
+            time.sleep_ms(200)
 
     dprint("Starting new thread")
     task_running = True
@@ -300,6 +301,14 @@ async def on_stop() -> None:
         dprint("Waiting for lock to be released / previous thread to fininsh")
         while task_running_lock.locked():
             time.sleep_ms(100)
+            
+    for file in os.listdir(DIRECTORY):
+        if file.startswith("webcam") and file.endswith(".jpg"):
+            try:
+                os.remove(file)
+                dprint(f"Deleted remaining file ${file}")
+            except:
+                pass
 
     if scr is not None:
         scr.clean()
